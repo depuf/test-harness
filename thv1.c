@@ -14,11 +14,24 @@ int cores = -1;
 
 int main(int argc, char *argv[]) {
 
-    char command[64];
+    char *command = NULL;
+    char *args[16];
+    int arg_count = 0;
 
     for (int i = 1; i < argc; i++) {
         if (p1strneq(argv[i],"-l",2)) {
+            command = malloc(p1strlen(argv[i+1]) + 1);
             p1strcpy(command,argv[i+1]);
+
+            int pos = 0;
+            char word[128];
+            while ((pos = p1getword(command, pos, word)) != -1) {
+                args[arg_count] = p1strdup(word);
+                arg_count++;
+            if (arg_count >= 15) break;
+            }
+
+            args[arg_count] = NULL;
             break;
         }
     }
@@ -31,31 +44,30 @@ int main(int argc, char *argv[]) {
         cores = p1atoi(c);
     }
 
-    struct timeval start, end;
+    struct timespec start,end;
 
-    gettimeofday(&start,NULL);
+    clock_gettime(CLOCK_MONOTONIC,&start);
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
 
     for (int i = 0; i < processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {
-            char *args[] = {command, NULL};
-            execvp(command, args);
+            execvp(args[0],args);
             exit(0);
         }
     }
 
-    for (int i = 0; i < processes-1; i++) {
+    for (int i = 0; i < processes; i++) {
 	    int status;
 	    waitpid(pid[i],&status,0);
     }
 
     free(pid);
 
-    gettimeofday(&end,NULL);
+    clock_gettime(CLOCK_MONOTONIC,&end);
 
-    double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_usec-start.tv_usec) / 1000000.0;
+    double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_nsec-start.tv_nsec) / 1e9;
     char process_str[12];
     char core_str[12];
 
@@ -74,5 +86,8 @@ int main(int argc, char *argv[]) {
     //p1putstr(1, elapsed_time_str);
     printf("%f",elapsed_time);
     p1putstr(1, " sec\n");
+
+    free(command);
+    return 0;
 
 }
