@@ -4,9 +4,6 @@
 #include <unistd.h>
 #include "p1fxns.h"
 
-//remove
-#include <stdio.h>
-
 char *p;
 char *c;
 int processes = -1;
@@ -70,12 +67,34 @@ int main(int argc, char *argv[]) {
     double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_nsec-start.tv_nsec) / 1e9;
     char process_str[12];
     char core_str[12];
+    char elapsed_time_str[12];
 
     p1itoa(processes,process_str);
     p1itoa(cores,core_str);
     
-    // processes, cores, elapsed time
-    //char output = "The elapsed time to execute %d copies of \"%s\" on %d processors is %7.3fsec\n.";
+    int int_part = (int)elapsed_time;
+    int frac_part = (int)((elapsed_time - int_part) * 1000);
+    char int_str[12], frac_str[4], temp_buf[50];
+
+    p1itoa(int_part, int_str);
+    p1itoa(frac_part, frac_str);
+
+    if (frac_part < 100) {
+        p1strcat(int_str, ".");
+        if (frac_part < 10) {
+            p1strcat(int_str, "00");
+        } else {
+            p1strcat(int_str, "0");
+        }
+        p1strcat(int_str, frac_str);
+    } else {
+        p1strcat(int_str, ".");
+        p1strcat(int_str, frac_str);
+    }
+
+    p1strpack(int_str, 7, ' ', temp_buf);
+    p1strcpy(elapsed_time_str, temp_buf);
+
     p1putstr(1, "The elapsed time to execute ");
     p1putstr(1, process_str); 
     p1putstr(1, " copies of \"");
@@ -83,9 +102,8 @@ int main(int argc, char *argv[]) {
     p1putstr(1, "\" on ");
     p1putstr(1, core_str); 
     p1putstr(1, " processors is ");
-    //p1putstr(1, elapsed_time_str);
-    printf("%f",elapsed_time);
-    p1putstr(1, " sec\n");
+    p1putstr(1, elapsed_time_str);
+    p1putstr(1, " sec.\n");
 
     free(command);
     return 0;
