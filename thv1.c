@@ -41,9 +41,9 @@ int main(int argc, char *argv[]) {
         cores = p1atoi(c);
     }
 
-    struct timespec start,end;
+    struct timeval start,end;
 
-    clock_gettime(CLOCK_MONOTONIC,&start);
+    gettimeofday(&start,NULL);
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
 
@@ -62,9 +62,9 @@ int main(int argc, char *argv[]) {
 
     free(pid);
 
-    clock_gettime(CLOCK_MONOTONIC,&end);
+    gettimeofday(&end,NULL);
 
-    double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_nsec-start.tv_nsec) / 1e9;
+    double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_usec-start.tv_usec) / 100000.0;
     char process_str[12];
     char core_str[12];
     char elapsed_time_str[12];
