@@ -6,14 +6,29 @@
 
 char *p;
 char *c;
+char *q;
 int processes = -1;
 int cores = -1;
+int quantum = -1;
 
 int main(int argc, char *argv[]) {
 
     char *command = NULL;
     char *args[16];
     int arg_count = 0;
+
+    if ((p = getenv("TH_NPROCESSES")) != NULL) {
+        processes = p1atoi(p);
+    }
+
+    if ((c = getenv("TH_NCORES")) != NULL) {
+        cores = p1atoi(c);
+    }
+
+    if ((q = getenv("TH_QUANTUM_MSEC")) != NULL) {
+        quantum = p1atoi(q);
+    }
+
 
     for (int i = 1; i < argc; i++) {
         if (p1strneq(argv[i],"-l",2)) {
@@ -30,15 +45,13 @@ int main(int argc, char *argv[]) {
 
             args[arg_count] = NULL;
             break;
+        } else if (p1strneq(argv[i], "-p", 2)) {
+            processes = p1atoi(argv[i+1]); 
+        } else if (p1strneq(argv[i], "-c", 2)) {
+            cores = p1atoi(argv[i+1]); 
+        } else if (p1strneq(argv[i], "-q", 2)) {
+            quantum = p1atoi(argv[i+1]);
         }
-    }
-
-    if ((p = getenv("TH_NPROCESSES")) != NULL) {
-        processes = p1atoi(p);
-    }
-
-    if ((c = getenv("TH_NCORES")) != NULL) {
-        cores = p1atoi(c);
     }
 
     struct timeval start,end;
@@ -64,7 +77,7 @@ int main(int argc, char *argv[]) {
 
     gettimeofday(&end,NULL);
 
-    double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_usec-start.tv_usec) / 100000.0;
+    double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_usec-start.tv_usec) / 1e6;
     char process_str[12];
     char core_str[12];
     char elapsed_time_str[12];
