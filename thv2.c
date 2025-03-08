@@ -63,6 +63,8 @@ int main(int argc, char *argv[]) {
     sigaddset(&sigs, SIGSTOP);
     sigaddset(&sigs, SIGCONT);
 
+    sigprocmask(SIG_BLOCK, &sigs, NULL);
+
     int received_sig;
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
