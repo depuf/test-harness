@@ -2,6 +2,7 @@
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <signal.h>
 #include "p1fxns.h"
 
 char *p;
@@ -56,16 +57,39 @@ int main(int argc, char *argv[]) {
 
     struct timeval start,end;
 
-    gettimeofday(&start,NULL);
+    sigset_t sigs;
+    sigemptyset(&sigs);
+    sigaddset(&sigs, SIGUSR1);
+    sigaddset(&sigs, SIGSTOP);
+    sigaddset(&sigs, SIGCONT);
+
+    int received_sig;
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
 
     for (int i = 0; i <= processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {
+            sigwait(&sigs, &received_sig);
+            // p1putstr(1,"i received a funny signal");
             execvp(args[0],args);
             exit(0);
         }
+    }
+
+    // timer stays here i believe
+    gettimeofday(&start,NULL);
+
+    for (int i = 0; i <= processes; i++) {
+	    kill(pid[i], SIGUSR1);
+    }
+
+    for (int i = 0; i <= processes; i++) {
+	    kill(pid[i], SIGSTOP);
+    }
+
+    for (int i = 0; i <= processes; i++) {
+	    kill(pid[i], SIGCONT);
     }
 
     for (int i = 0; i <= processes; i++) {
