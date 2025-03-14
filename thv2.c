@@ -69,11 +69,11 @@ int main(int argc, char *argv[]) {
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
 
-    for (int i = 0; i <= processes; i++) {
+    for (int i = 0; i < processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {
             sigwait(&sigs, &received_sig);
-            // p1putstr(1,"i received a funny signal");
+            //p1putstr(1,"i received a funny signal");
             execvp(args[0],args);
             exit(0);
         }
@@ -82,19 +82,19 @@ int main(int argc, char *argv[]) {
     // timer stays here i believe
     gettimeofday(&start,NULL);
 
-    for (int i = 0; i <= processes; i++) {
+    for (int i = 0; i < processes; i++) {
 	    kill(pid[i], SIGUSR1);
     }
 
-    for (int i = 0; i <= processes; i++) {
+    for (int i = 0; i < processes; i++) {
 	    kill(pid[i], SIGSTOP);
     }
 
-    for (int i = 0; i <= processes; i++) {
+    for (int i = 0; i < processes; i++) {
 	    kill(pid[i], SIGCONT);
     }
 
-    for (int i = 0; i <= processes; i++) {
+    for (int i = 0; i < processes; i++) {
 	    int status;
 	    waitpid(pid[i],&status,0);
     }
