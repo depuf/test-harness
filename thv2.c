@@ -17,7 +17,7 @@ char *args[16];
 int arg_count = 0;
 
 void handle_sigusr1() {
-    p1putstr(1,"i received a funny signal");
+    p1putstr(1,"i received a funny signal\n");
     execvp(args[0],args);
     exit(0);
 }
@@ -87,6 +87,8 @@ int main(int argc, char *argv[]) {
             //exit(0);
         }
     }
+
+    sleep(1);
 
     // timer stays here i believe
     gettimeofday(&start,NULL);
