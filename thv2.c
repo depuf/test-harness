@@ -12,11 +12,17 @@ int processes = -1;
 int cores = -1;
 int quantum = -1;
 
-int main(int argc, char *argv[]) {
+char *command = NULL;
+char *args[16];
+int arg_count = 0;
 
-    char *command = NULL;
-    char *args[16];
-    int arg_count = 0;
+void handle_sigusr1() {
+    p1putstr(1,"i received a funny signal");
+    execvp(args[0],args);
+    exit(0);
+}
+
+int main(int argc, char *argv[]) {
 
     if ((p = getenv("TH_NPROCESSES")) != NULL) {
         processes = p1atoi(p);
@@ -57,6 +63,7 @@ int main(int argc, char *argv[]) {
 
     struct timeval start,end;
 
+    /*
     sigset_t sigs;
     sigemptyset(&sigs);
     sigaddset(&sigs, SIGUSR1);
@@ -66,16 +73,18 @@ int main(int argc, char *argv[]) {
     sigprocmask(SIG_BLOCK, &sigs, NULL);
 
     int received_sig;
+    */
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
 
     for (int i = 0; i < processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {
-            sigwait(&sigs, &received_sig);
-            //p1putstr(1,"i received a funny signal");
-            execvp(args[0],args);
-            exit(0);
+            signal(SIGUSR1, handle_sigusr1);
+            pause();
+            //sigwait(&sigs, &received_sig);
+            
+            //exit(0);
         }
     }
 
