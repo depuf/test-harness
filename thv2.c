@@ -57,13 +57,10 @@ int main(int argc, char *argv[]) {
 
     struct timeval start,end;
 
-    sigset_t sigs;
-    sigemptyset(&sigs);
-    sigaddset(&sigs, SIGUSR1);
-    sigaddset(&sigs, SIGSTOP);
-    sigaddset(&sigs, SIGCONT);
+    // switched from sigset_t, sigemptyset, sigaddset
+    unsigned long sigs = 1UL << (SIGUSR1-1) | 1UL << (SIGSTOP-1) | 1UL << (SIGCONT-1);
 
-    sigprocmask(SIG_BLOCK, &sigs, NULL);
+    //sigprocmask(SIG_BLOCK, &sigs, NULL); maybe i dont need this
 
     int received_sig;
 
@@ -72,8 +69,9 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i <= processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {
-            sigwait(&sigs, &received_sig);
-            // p1putstr(1,"i received a funny signal");
+            pause();
+            // sigwait(&sigs, &received_sig);
+            p1putstr(1,"i received a funny signal");
             execvp(args[0],args);
             exit(0);
         }
