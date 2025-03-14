@@ -142,8 +142,15 @@ int main(int argc, char *argv[]) {
     p1putstr(1, " processors is ");
     p1putstr(1, elapsed_time_str);
     p1putstr(1, " sec.\n");
+    
+    if (command != NULL) {
+	free(command);
+    }
 
-    free(command);
+    for (int i = 0; i < arg_count; i++) {
+	free(args[i]);
+    }
+
     return 0;
 
-}
+}	

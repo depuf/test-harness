@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
 
-    for (int i = 0; i <= processes; i++) {
+    for (int i = 0; i < processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {
             execvp(args[0],args);
@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    for (int i = 0; i <= processes; i++) {
+    for (int i = 0; i < processes; i++) {
 	    int status;
 	    waitpid(pid[i],&status,0);
     }
@@ -116,8 +116,15 @@ int main(int argc, char *argv[]) {
     p1putstr(1, " processors is ");
     p1putstr(1, elapsed_time_str);
     p1putstr(1, " sec.\n");
+    
+    if (command != NULL) {
+	free(command);
+    }
 
-    free(command);
+    for (int i = 0; i < arg_count; i++) {
+	free(args[i]);
+    }
+
     return 0;
 
 }
