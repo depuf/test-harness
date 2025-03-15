@@ -3,6 +3,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <signal.h>
+#include "cirque.h"
 #include "p1fxns.h"
 
 char *p;
@@ -12,11 +13,58 @@ int processes = -1;
 int cores = -1;
 int quantum = -1;
 
-int main(int argc, char *argv[]) {
+char *command = NULL;
+char *args[16];
+int arg_count = 0;
 
-    char *command = NULL;
-    char *args[16];
-    int arg_count = 0;
+int running;
+queue *process_queue;
+queue *running_queue;
+
+void handle_sigusr1() {
+    p1putstr(1,"i received a funny signal\n");
+    execvp(args[0],args);
+    exit(0);
+}
+
+// idea is to stop running processes, queue em up, then run the next processes
+void scheduler() {
+    for (int i = 0; i < running; i++) {
+        pid_t p = dequeue(running_queue);
+        p1putstr(1,"ig i stop :(");
+        kill(p,SIGSTOP);
+        enqueue(process_queue,p);
+    }
+
+    running = 0;
+    for (int i = 0; i < cores; i++) {
+        pid_t p = dequeue(process_queue);
+        p1putstr(1,"i will run now");
+        kill(p,SIGCONT);
+        enqueue(running_queue,p);
+        running++;
+    }
+
+    struct itimerval timer;
+    timer.it_interval.tv_sec = 0;
+    timer.it_interval.tv_usec = quantum * 1000;
+    timer.it_value.tv_sec = 0;
+    timer.it_value.tv_usec = quantum * 1000;
+    setitimer(ITIMER_REAL,&timer,NULL);
+}
+
+void cleanup(int signum) {
+    int status;
+    pid_t pid;
+
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        remove_from_queue(process_queue, pid);
+        remove_from_queue(running_queue, pid);
+    }
+}
+
+
+int main(int argc, char *argv[]) {
 
     if ((p = getenv("TH_NPROCESSES")) != NULL) {
         processes = p1atoi(p);
@@ -56,51 +104,40 @@ int main(int argc, char *argv[]) {
     }
 
     struct timeval start,end;
-    
-    struct itimerval timer;
-    timer.it_interval.tv_sec = 0;
-    timer.it_interval.tv_usec = quantum * 1000;
-    timer.it_value.tv_sec = 0;
-    timer.it_value.tv_usec = quantum * 1000;
 
-    setitimer(ITIMER_REAL,&timer,NULL);
+    struct sigaction sa;
 
-    sigset_t sigs;
-    sigemptyset(&sigs);
-    sigaddset(&sigs, SIGUSR1);
-    sigaddset(&sigs, SIGSTOP);
-    sigaddset(&sigs, SIGCONT);
+    sa.sa_handler = scheduler;
+    sigaction(SIGALRM, &sa, NULL);
 
-    sigprocmask(SIG_BLOCK, &sigs, NULL);
-
-    int received_sig;
+    sa.sa_handler = cleanup;
+    sigaction(SIGCHLD, &sa, NULL);
+ 
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
 
-    for (int i = 0; i <= processes; i++) {
+    for (int i = 0; i < processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {
-            sigwait(&sigs, &received_sig);
-            execvp(args[0],args);
+            signal(SIGUSR1, handle_sigusr1);
+            pause();            
             exit(0);
+        } else {
+            enqueue(process_queue, pid[i]);
         }
     }
 
+    sleep(1);
+
+    // timer stays here i believe
     gettimeofday(&start,NULL);
 
-    for (int i = 0; i <= processes; i++) {
+    for (int i = 0; i < processes; i++) {
 	    kill(pid[i], SIGUSR1);
     }
 
-    for (int i = 0; i <= processes; i++) {
-	    kill(pid[i], SIGSTOP);
-    }
 
-    for (int i = 0; i <= processes; i++) {
-	    kill(pid[i], SIGCONT);
-    }
-
-    for (int i = 0; i <= processes; i++) {
+    for (int i = 0; i < processes; i++) {
 	    int status;
 	    waitpid(pid[i],&status,0);
     }
@@ -148,8 +185,15 @@ int main(int argc, char *argv[]) {
     p1putstr(1, " processors is ");
     p1putstr(1, elapsed_time_str);
     p1putstr(1, " sec.\n");
+    
+    if (command != NULL) {
+	free(command);
+    }
 
-    free(command);
+    for (int i = 0; i < arg_count; i++) {
+	free(args[i]);
+    }
+
     return 0;
 
-}
+}	

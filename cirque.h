@@ -16,5 +16,6 @@ typedef struct queue {
 
 void enqueue(queue *q, pid_t id);
 pid_t dequeue(queue *q);
+void remove_from_queue(queue *q, pid_t pid);
 
 #endif 
