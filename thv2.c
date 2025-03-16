@@ -17,7 +17,6 @@ char *args[16];
 int arg_count = 0;
 
 void handle_sigusr1() {
-    p1putstr(1,"i received a funny signal\n");
     execvp(args[0],args);
     exit(0);
 }
@@ -36,6 +35,10 @@ int main(int argc, char *argv[]) {
         quantum = p1atoi(q);
     }
 
+    if (processes <= 0 || cores <= 0 || quantum <= 0) {
+        p1perror(1, "error: invalid input values\n");
+        return 1;
+    }
 
     for (int i = 1; i < argc; i++) {
         if (p1strneq(argv[i],"-l",2)) {
@@ -63,18 +66,6 @@ int main(int argc, char *argv[]) {
 
     struct timeval start,end;
 
-    /*
-    sigset_t sigs;
-    sigemptyset(&sigs);
-    sigaddset(&sigs, SIGUSR1);
-    sigaddset(&sigs, SIGSTOP);
-    sigaddset(&sigs, SIGCONT);
-
-    sigprocmask(SIG_BLOCK, &sigs, NULL);
-
-    int received_sig;
-    */
-
     pid_t *pid = malloc(processes * sizeof(pid_t));
 
     for (int i = 0; i < processes; i++) {
@@ -82,9 +73,6 @@ int main(int argc, char *argv[]) {
         if (pid[i] == 0) {
             signal(SIGUSR1, handle_sigusr1);
             pause();
-            //sigwait(&sigs, &received_sig);
-            
-            //exit(0);
         }
     }
 

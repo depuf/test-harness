@@ -29,10 +29,13 @@ int main(int argc, char *argv[]) {
         quantum = p1atoi(q);
     }
 
-
     for (int i = 1; i < argc; i++) {
         if (p1strneq(argv[i],"-l",2)) {
             command = malloc(p1strlen(argv[i+1]) + 1);
+            if (command == NULL) {
+                p1perror(1, "error: malloc failed at command\n");
+                return 1;
+            }
             p1strcpy(command,argv[i+1]);
 
             int pos = 0;
@@ -54,17 +57,27 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    if (processes <= 0 || cores <= 0 || quantum <= 0) {
+        p1perror(1, "error: invalid input values\n");
+        return 1;
+    }
+
     struct timeval start,end;
 
     gettimeofday(&start,NULL);
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
+    if (pid == NULL) {
+        p1perror(1, "error: malloc failed at pid\n");
+        return 1;
+    }
 
     for (int i = 0; i < processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {
             execvp(args[0],args);
-            exit(0);
+            p1perror(1, "error: execvp failed\n");
+            exit(1);
         }
     }
 
@@ -118,11 +131,11 @@ int main(int argc, char *argv[]) {
     p1putstr(1, " sec.\n");
     
     if (command != NULL) {
-	free(command);
+	    free(command);
     }
 
     for (int i = 0; i < arg_count; i++) {
-	free(args[i]);
+	    free(args[i]);
     }
 
     return 0;
