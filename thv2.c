@@ -16,9 +16,20 @@ char *command = NULL;
 char *args[16];
 int arg_count = 0;
 
+void cleanup() {
+    if (command != NULL) {
+	    free(command);
+    }
+
+    for (int i = 0; i < arg_count; i++) {
+	    free(args[i]);
+    }
+}
+
 void handle_sigusr1() {
     execvp(args[0],args);
-    exit(0);
+    p1perror(1,"error: execvp failed");
+    exit(1);
 }
 
 int main(int argc, char *argv[]) {
@@ -33,16 +44,20 @@ int main(int argc, char *argv[]) {
 
     if ((q = getenv("TH_QUANTUM_MSEC")) != NULL) {
         quantum = p1atoi(q);
-    }
-
-    if (processes <= 0 || cores <= 0 || quantum <= 0) {
-        p1perror(1, "error: invalid input values\n");
-        return 1;
-    }
+    } 
 
     for (int i = 1; i < argc; i++) {
         if (p1strneq(argv[i],"-l",2)) {
+            if (i + 1 >= argc || p1strlen(argv[i + 1]) == 0) { 
+                p1putstr(STDERR_FILENO, "error: no command provided\n");
+                return 1; 
+            }
+
             command = malloc(p1strlen(argv[i+1]) + 1);
+            if (command == NULL) {
+                p1perror(1, "error: malloc failed at command\n");
+                return 1;
+            }
             p1strcpy(command,argv[i+1]);
 
             int pos = 0;
@@ -64,43 +79,81 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    if (processes <= 0 || cores <= 0 || quantum <= 0) {
+        p1perror(1, "error: invalid input values\n");
+        return 1;
+    }
+
     struct timeval start,end;
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
+    if (pid == NULL) {
+        p1perror(1, "error: malloc failed at pid\n");
+        cleanup();
+        return 1;
+    }
 
     for (int i = 0; i < processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {
             signal(SIGUSR1, handle_sigusr1);
             pause();
+        } else if (pid[i]<0) {
+            p1perror(1, "error: fork failed\n");
+            cleanup();
+            return 1;
         }
     }
 
     sleep(1);
 
-    // timer stays here i believe
-    gettimeofday(&start,NULL);
-
-    for (int i = 0; i < processes; i++) {
-	    kill(pid[i], SIGUSR1);
+    if (gettimeofday(&start, NULL) != 0) {
+        p1perror(1, "error: gettimeofday failed\n");
+        cleanup();
+        return 1;
     }
 
     for (int i = 0; i < processes; i++) {
-	    kill(pid[i], SIGSTOP);
+	    if (kill(pid[i], SIGUSR1) < 0) {
+            p1perror(1, "error: kill failed\n");
+            cleanup();
+            return 1;
+        }
     }
 
     for (int i = 0; i < processes; i++) {
-	    kill(pid[i], SIGCONT);
+	    if (kill(pid[i], SIGSTOP) < 0) {
+            p1perror(1, "error: kill failed\n");
+            cleanup();
+            return 1;
+        }
+    }
+
+    for (int i = 0; i < processes; i++) {
+	    if (kill(pid[i], SIGCONT) < 0) {
+            p1perror(1, "error: kill failed\n");
+            cleanup();
+            return 1;
+        }
     }
 
     for (int i = 0; i < processes; i++) {
 	    int status;
-	    waitpid(pid[i],&status,0);
+	    if (waitpid(pid[i], &status, 0) < 0) {
+            p1perror(1, "error: waitpid failed\n");
+            free(pid);
+            cleanup();
+            return 1;
+        }
     }
 
     free(pid);
 
-    gettimeofday(&end,NULL);
+    if (gettimeofday(&end, NULL) != 0) {
+        p1perror(1, "error: gettimeofday failed\n");
+        cleanup();
+        return 1;
+    }
 
     double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_usec-start.tv_usec) / 1e6;
     char process_str[12];
@@ -142,13 +195,7 @@ int main(int argc, char *argv[]) {
     p1putstr(1, elapsed_time_str);
     p1putstr(1, " sec.\n");
     
-    if (command != NULL) {
-	free(command);
-    }
-
-    for (int i = 0; i < arg_count; i++) {
-	free(args[i]);
-    }
+    cleanup();
 
     return 0;
 

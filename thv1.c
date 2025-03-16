@@ -11,11 +11,21 @@ int processes = -1;
 int cores = -1;
 int quantum = -1;
 
-int main(int argc, char *argv[]) {
+char *command = NULL;
+char *args[16];
+int arg_count = 0;
 
-    char *command = NULL;
-    char *args[16];
-    int arg_count = 0;
+void cleanup() {
+    if (command != NULL) {
+	    free(command);
+    }
+
+    for (int i = 0; i < arg_count; i++) {
+	    free(args[i]);
+    }
+}
+
+int main(int argc, char *argv[]) {
 
     if ((p = getenv("TH_NPROCESSES")) != NULL) {
         processes = p1atoi(p);
@@ -31,6 +41,11 @@ int main(int argc, char *argv[]) {
 
     for (int i = 1; i < argc; i++) {
         if (p1strneq(argv[i],"-l",2)) {
+            if (i + 1 >= argc || p1strlen(argv[i + 1]) == 0) { 
+                p1putstr(STDERR_FILENO, "error: no command provided\n");
+                return 1; 
+            }
+
             command = malloc(p1strlen(argv[i+1]) + 1);
             if (command == NULL) {
                 p1perror(1, "error: malloc failed at command\n");
@@ -64,11 +79,16 @@ int main(int argc, char *argv[]) {
 
     struct timeval start,end;
 
-    gettimeofday(&start,NULL);
+    if (gettimeofday(&start, NULL) != 0) {
+        p1perror(1, "error: gettimeofday failed\n");
+        cleanup();
+        return 1;
+    }
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
     if (pid == NULL) {
         p1perror(1, "error: malloc failed at pid\n");
+        cleanup();
         return 1;
     }
 
@@ -77,18 +97,32 @@ int main(int argc, char *argv[]) {
         if (pid[i] == 0) {
             execvp(args[0],args);
             p1perror(1, "error: execvp failed\n");
+            cleanup();
             exit(1);
+        } else if (pid[i]<0) {
+            p1perror(1, "error: fork failed\n");
+            cleanup();
+            return 1;
         }
     }
 
     for (int i = 0; i < processes; i++) {
 	    int status;
-	    waitpid(pid[i],&status,0);
+	    if (waitpid(pid[i], &status, 0) < 0) {
+            p1perror(1, "error: waitpid failed\n");
+            free(pid);
+            cleanup();
+            return 1;
+        }
     }
 
     free(pid);
 
-    gettimeofday(&end,NULL);
+    if (gettimeofday(&end, NULL) != 0) {
+        p1perror(1, "error: gettimeofday failed\n");
+        cleanup();
+        return 1;
+    }
 
     double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_usec-start.tv_usec) / 1e6;
     char process_str[12];
@@ -130,13 +164,7 @@ int main(int argc, char *argv[]) {
     p1putstr(1, elapsed_time_str);
     p1putstr(1, " sec.\n");
     
-    if (command != NULL) {
-	    free(command);
-    }
-
-    for (int i = 0; i < arg_count; i++) {
-	    free(args[i]);
-    }
+    cleanup();
 
     return 0;
 

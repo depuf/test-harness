@@ -23,7 +23,6 @@ int running;
 queue *process_queue;
 queue *running_queue;
 
-// Philippians 4:13
 void handle_sigcont(int signum) {
     // this does nothing
 }
@@ -61,7 +60,7 @@ void scheduler(int signum) {
     }
 }
 
-void cleanup(int signum) {
+void handle_child(int signum) {
     int status;
     pid_t pid;
 
@@ -74,6 +73,16 @@ void cleanup(int signum) {
             remove_from_queue(running_queue, pid);
             running--;
         }
+    }
+}
+
+void cleanup() {
+    if (command != NULL) {
+	    free(command);
+    }
+
+    for (int i = 0; i < arg_count; i++) {
+	    free(args[i]);
     }
 }
 
@@ -100,7 +109,16 @@ int main(int argc, char *argv[]) {
 
     for (int i = 1; i < argc; i++) {
         if (p1strneq(argv[i], "-l", 2)) {
+            if (i + 1 >= argc || p1strlen(argv[i + 1]) == 0) { 
+                p1putstr(STDERR_FILENO, "error: no command provided\n");
+                return 1; 
+            }
+
             command = malloc(p1strlen(argv[i + 1]) + 1);
+            if (command == NULL) {
+                p1perror(1, "error: malloc failed at command\n");
+                return 1;
+            }
             p1strcpy(command, argv[i + 1]);
 
             int pos = 0;
@@ -127,6 +145,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // all legal, https://man7.org/linux/man-pages/man2/sigaction.2.html
     struct sigaction sa;
     sa.sa_mask = (sigset_t){0};
     sa.sa_flags = 0;
@@ -134,17 +153,23 @@ int main(int argc, char *argv[]) {
     sa.sa_handler = scheduler;
     sigaction(SIGALRM, &sa, NULL);
 
-    sa.sa_handler = cleanup;
+    sa.sa_handler = handle_child;
     sigaction(SIGCHLD, &sa, NULL);
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
+    if (pid == NULL) {
+        p1perror(1, "error: malloc failed at pid\n");
+        cleanup();
+        return 1;
+    }
+
     for (int i = 0; i < processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {  
             signal(SIGCONT, handle_sigcont);
             pause(); 
             execvp(args[0], args);
-            p1perror(1,"execvp");
+            p1perror(1,"execvp failed");
             exit(1);
         } else { 
             enqueue(process_queue, pid[i]);
@@ -169,7 +194,6 @@ int main(int argc, char *argv[]) {
         running++;
     }
 
-    // Proverbs 16:3
     struct itimerval timer;
     timer.it_interval.tv_sec = quantum / 1000;  
     timer.it_interval.tv_usec = (quantum % 1000) * 1000; 
@@ -177,7 +201,7 @@ int main(int argc, char *argv[]) {
     timer.it_value.tv_usec = (quantum % 1000) * 1000;
     setitimer(ITIMER_REAL, &timer, NULL);
 
-    // main drinks coffee for a bit or whatever
+    // makes sure main doesnt exit while child processes arent finished
     int finished = 0;
     while (!finished) {
         finished = 1;
@@ -195,12 +219,8 @@ int main(int argc, char *argv[]) {
 
 
     free(pid);
-    if (command != NULL) {
-        free(command);
-    }
-    for (int i = 0; i < arg_count; i++) {
-        free(args[i]);
-    }
+    
+    cleanup();
 
     destroy_queue(process_queue);
     destroy_queue(running_queue);
