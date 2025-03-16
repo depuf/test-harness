@@ -108,3 +108,19 @@ int is_empty(queue *q) {
     }
     return q->front == NULL; 
 }
+
+void print_queue(queue *q) {
+    node *current = q->front;
+    if (!current) {
+        p1putstr(1, "[empty]\n");
+        return;
+    }
+
+    while (current) {
+        p1putint(1, current->pid);
+        p1putstr(1, " ");
+        current = current->next;
+    }
+    
+    p1putstr(1, "\n");
+}

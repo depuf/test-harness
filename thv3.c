@@ -23,43 +23,57 @@ int running;
 queue *process_queue;
 queue *running_queue;
 
-void handle_sigusr1(int signum) {
-    p1putstr(1, "i received a funny signal\n");
-    execvp(args[0], args);
-    perror("execvp");
-    exit(1);
+// Philippians 4:13
+void handle_sigcont(int signum) {
+    // this does nothing
 }
 
 void scheduler(int signum) {
+    p1putstr(1, "\n--- 𓆩𓆪 ---\n");
+
+    p1putstr(1, "ready queue: ");
+    print_queue(process_queue);
+
+    p1putstr(1, "running queue: ");
+    print_queue(running_queue);
+
     for (int i = 0; i < running; i++) {
         pid_t p = dequeue(running_queue);
         if (p != -1) {
-            p1putstr(1, "ig i stop :(\n");
-            kill(p, SIGSTOP);
-            enqueue(process_queue, p);
+            int status;
+            pid_t result = waitpid(p, &status, WNOHANG);
+
+            if (result == 0) {
+                kill(p, SIGSTOP);
+                enqueue(process_queue, p);
+            }
         }
     }
 
     running = 0;
-    for (int i = 0; i < cores; i++) {
+    for (int i = 0; i < cores && !(is_empty(process_queue)); i++) {
         pid_t p = dequeue(process_queue);
         if (p != -1) {
-            p1putstr(1, "i will run now\n");
-            kill(p, SIGCONT);
             enqueue(running_queue, p);
+            kill(p, SIGCONT);
             running++;
         }
     }
 }
 
 void cleanup(int signum) {
-    p1putstr(1, "i finished\n");
     int status;
     pid_t pid;
 
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-        remove_from_queue(process_queue, pid);
-        remove_from_queue(running_queue, pid);
+        if (WIFEXITED(status) || WIFSIGNALED(status)) {
+            p1putstr(1, "\nprocess ");
+            p1putint(1, pid);
+            p1putstr(1, " completed\n");
+            remove_from_queue(process_queue, pid);
+            remove_from_queue(running_queue, pid);
+            running--;
+        }
     }
 }
 
@@ -114,7 +128,7 @@ int main(int argc, char *argv[]) {
     }
 
     struct sigaction sa;
-    //sigemptyset(&sa.sa_mask);
+    sa.sa_mask = (sigset_t){0};
     sa.sa_flags = 0;
 
     sa.sa_handler = scheduler;
@@ -127,36 +141,57 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < processes; i++) {
         pid[i] = fork();
         if (pid[i] == 0) {  
-            signal(SIGUSR1, handle_sigusr1);
-            pause();  
-            exit(0);
+            signal(SIGCONT, handle_sigcont);
+            pause(); 
+            execvp(args[0], args);
+            p1perror(1,"execvp");
+            exit(1);
         } else { 
             enqueue(process_queue, pid[i]);
         }
     }
 
+    sleep(1);
+
+    p1putstr(1, "\n--- STARTING ROUND ---\n");
+
+    p1putstr(1, "ready queue: ");
+    print_queue(process_queue);
+
+    p1putstr(1, "running queue: ");
+    print_queue(running_queue);
+
     for (int i = 0; i < cores && !is_empty(process_queue); i++) {
         pid_t p = dequeue(process_queue);
-        kill(p, SIGUSR1);  
-        //kill(p, SIGCONT); 
+
         enqueue(running_queue, p);
+        kill(p, SIGCONT); 
         running++;
     }
 
+    // Proverbs 16:3
+    struct itimerval timer;
+    timer.it_interval.tv_sec = quantum / 1000;  
+    timer.it_interval.tv_usec = (quantum % 1000) * 1000; 
+    timer.it_value.tv_sec = quantum / 1000;
+    timer.it_value.tv_usec = (quantum % 1000) * 1000;
+    setitimer(ITIMER_REAL, &timer, NULL);
 
-    while (!is_empty(process_queue)) {
-        struct itimerval timer;
-        timer.it_interval.tv_sec = quantum / 1000;  // Get whole seconds
-        timer.it_interval.tv_usec = (quantum % 1000) * 1000;  // Convert remaining milliseconds to microseconds
-        timer.it_value.tv_sec = quantum / 1000;
-        timer.it_value.tv_usec = (quantum % 1000) * 1000;
-        setitimer(ITIMER_REAL, &timer, NULL);
-
-    }
+    // main drinks coffee for a bit or whatever
+    int finished = 0;
+    while (!finished) {
+        finished = 1;
     
+        if (!is_empty(process_queue) || !is_empty(running_queue)) {
+            finished = 0;
+        }
+    
+        usleep(100000);
+    }
 
-
-    while (wait(NULL) > 0);
+    for (int i = 0; i < processes; i++) {
+        waitpid(pid[i], NULL, 0);
+    }
 
 
     free(pid);
