@@ -1,10 +1,46 @@
-#include <sys/_types/_pid_t.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include "p1fxns.h"
 #include "cirque.h"
 
-// enqueue, dequeue, 'move first element to back'
+queue *create_queue() {
+    queue *q = malloc(sizeof(queue));
+    if (q == NULL) {
+        p1perror(1, "error: failed to allocate memory for queue\n");
+        return NULL;
+    }
+
+    q->front = NULL;
+    q->end = NULL;
+    return q;
+}
+
+void destroy_queue(queue *q) {
+    if (q == NULL) {
+        return;
+    }
+
+    node *curr = q->front;
+    while (curr != NULL) {
+        node *temp = curr;
+        curr = curr->next;
+        free(temp);
+    }
+    free(q);
+}
+
 void enqueue(queue *q, pid_t id) {
+    if (q == NULL) {
+        p1perror(1, "error: queue is null\n");
+        return;
+    }
+
     node *n = malloc(sizeof(node));
+    if (n == NULL) {
+        p1perror(1, "error: failed to allocate node\n");
+        return;
+    }
+
     n->pid = id;
     n->next = NULL;
 
@@ -14,29 +50,29 @@ void enqueue(queue *q, pid_t id) {
     } else {
         q->end->next = n;
         q->end = n;
-    } 
+    }
 }
 
 pid_t dequeue(queue *q) {
-    if (q->front != NULL) {
-        node *temp = q->front;
-        pid_t pid = temp->pid;
-        q->front = q->front->next;
-
-        if (q->front == NULL) {
-            q->end = NULL;
-        }
-
-        free(temp);
-        return pid;
+    if (q == NULL || q->front == NULL) {
+        return -1; 
     }
-    return -1;
-}
 
+    node *temp = q->front;
+    pid_t pid = temp->pid;
+    q->front = q->front->next;
+
+    if (q->front == NULL) {
+        q->end = NULL;  
+    }
+
+    free(temp);
+    return pid;
+}
 
 void remove_from_queue(queue *q, pid_t pid) {
     if (q == NULL || q->front == NULL) {
-        return; 
+        return;
     }
 
     node *prev = NULL;
@@ -52,7 +88,7 @@ void remove_from_queue(queue *q, pid_t pid) {
             } else {
                 prev->next = curr->next;
                 if (curr->next == NULL) {
-                    q->end = prev; 
+                    q->end = prev;  
                 }
             }
 
@@ -63,4 +99,12 @@ void remove_from_queue(queue *q, pid_t pid) {
         prev = curr;
         curr = curr->next;
     }
+
+}
+
+int is_empty(queue *q) {
+    if (q == NULL) {
+        return 1; 
+    }
+    return q->front == NULL; 
 }

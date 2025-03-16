@@ -3,6 +3,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <signal.h>
+#include <stdio.h>
+#include <string.h>
 #include "cirque.h"
 #include "p1fxns.h"
 
@@ -21,39 +23,37 @@ int running;
 queue *process_queue;
 queue *running_queue;
 
-void handle_sigusr1() {
-    p1putstr(1,"i received a funny signal\n");
-    execvp(args[0],args);
-    exit(0);
+void handle_sigusr1(int signum) {
+    p1putstr(1, "i received a funny signal\n");
+    execvp(args[0], args);
+    perror("execvp");
+    exit(1);
 }
 
-// idea is to stop running processes, queue em up, then run the next processes
-void scheduler() {
+void scheduler(int signum) {
     for (int i = 0; i < running; i++) {
         pid_t p = dequeue(running_queue);
-        p1putstr(1,"ig i stop :(");
-        kill(p,SIGSTOP);
-        enqueue(process_queue,p);
+        if (p != -1) {
+            p1putstr(1, "ig i stop :(\n");
+            kill(p, SIGSTOP);
+            enqueue(process_queue, p);
+        }
     }
 
     running = 0;
     for (int i = 0; i < cores; i++) {
         pid_t p = dequeue(process_queue);
-        p1putstr(1,"i will run now");
-        kill(p,SIGCONT);
-        enqueue(running_queue,p);
-        running++;
+        if (p != -1) {
+            p1putstr(1, "i will run now\n");
+            kill(p, SIGCONT);
+            enqueue(running_queue, p);
+            running++;
+        }
     }
-
-    struct itimerval timer;
-    timer.it_interval.tv_sec = 0;
-    timer.it_interval.tv_usec = quantum * 1000;
-    timer.it_value.tv_sec = 0;
-    timer.it_value.tv_usec = quantum * 1000;
-    setitimer(ITIMER_REAL,&timer,NULL);
 }
 
 void cleanup(int signum) {
+    p1putstr(1, "i finished\n");
     int status;
     pid_t pid;
 
@@ -63,8 +63,14 @@ void cleanup(int signum) {
     }
 }
 
-
 int main(int argc, char *argv[]) {
+    process_queue = create_queue();
+    running_queue = create_queue();
+
+    if (process_queue == NULL || running_queue == NULL) {
+        p1perror(1, "error: failed to create queues\n");
+        return 1;
+    }
 
     if ((p = getenv("TH_NPROCESSES")) != NULL) {
         processes = p1atoi(p);
@@ -78,122 +84,91 @@ int main(int argc, char *argv[]) {
         quantum = p1atoi(q);
     }
 
-
     for (int i = 1; i < argc; i++) {
-        if (p1strneq(argv[i],"-l",2)) {
-            command = malloc(p1strlen(argv[i+1]) + 1);
-            p1strcpy(command,argv[i+1]);
+        if (p1strneq(argv[i], "-l", 2)) {
+            command = malloc(p1strlen(argv[i + 1]) + 1);
+            p1strcpy(command, argv[i + 1]);
 
             int pos = 0;
             char word[128];
             while ((pos = p1getword(command, pos, word)) != -1) {
                 args[arg_count] = p1strdup(word);
                 arg_count++;
-            if (arg_count >= 15) break;
+                if (arg_count >= 15) break;
             }
 
             args[arg_count] = NULL;
             break;
         } else if (p1strneq(argv[i], "-p", 2)) {
-            processes = p1atoi(argv[i+1]); 
+            processes = p1atoi(argv[i + 1]);
         } else if (p1strneq(argv[i], "-c", 2)) {
-            cores = p1atoi(argv[i+1]); 
+            cores = p1atoi(argv[i + 1]);
         } else if (p1strneq(argv[i], "-q", 2)) {
-            quantum = p1atoi(argv[i+1]);
+            quantum = p1atoi(argv[i + 1]);
         }
     }
 
-    struct timeval start,end;
+    if (processes <= 0 || cores <= 0 || quantum <= 0) {
+        p1perror(1, "error: invalid input values\n");
+        return 1;
+    }
 
     struct sigaction sa;
+    //sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
 
     sa.sa_handler = scheduler;
     sigaction(SIGALRM, &sa, NULL);
 
     sa.sa_handler = cleanup;
     sigaction(SIGCHLD, &sa, NULL);
- 
 
     pid_t *pid = malloc(processes * sizeof(pid_t));
-
     for (int i = 0; i < processes; i++) {
         pid[i] = fork();
-        if (pid[i] == 0) {
+        if (pid[i] == 0) {  
             signal(SIGUSR1, handle_sigusr1);
-            pause();            
+            pause();  
             exit(0);
-        } else {
+        } else { 
             enqueue(process_queue, pid[i]);
         }
     }
 
-    sleep(1);
-
-    // timer stays here i believe
-    gettimeofday(&start,NULL);
-
-    for (int i = 0; i < processes; i++) {
-	    kill(pid[i], SIGUSR1);
+    for (int i = 0; i < cores && !is_empty(process_queue); i++) {
+        pid_t p = dequeue(process_queue);
+        kill(p, SIGUSR1);  
+        //kill(p, SIGCONT); 
+        enqueue(running_queue, p);
+        running++;
     }
 
 
-    for (int i = 0; i < processes; i++) {
-	    int status;
-	    waitpid(pid[i],&status,0);
+    while (!is_empty(process_queue)) {
+        struct itimerval timer;
+        timer.it_interval.tv_sec = quantum / 1000;  // Get whole seconds
+        timer.it_interval.tv_usec = (quantum % 1000) * 1000;  // Convert remaining milliseconds to microseconds
+        timer.it_value.tv_sec = quantum / 1000;
+        timer.it_value.tv_usec = (quantum % 1000) * 1000;
+        setitimer(ITIMER_REAL, &timer, NULL);
+
     }
+    
+
+
+    while (wait(NULL) > 0);
+
 
     free(pid);
-
-    gettimeofday(&end,NULL);
-
-    double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_usec-start.tv_usec) / 1e6;
-    char process_str[12];
-    char core_str[12];
-    char elapsed_time_str[12];
-
-    p1itoa(processes,process_str);
-    p1itoa(cores,core_str);
-    
-    int int_part = (int)elapsed_time;
-    int frac_part = (int)((elapsed_time - int_part) * 1000);
-    char int_str[12], frac_str[4], temp_buf[50];
-
-    p1itoa(int_part, int_str);
-    p1itoa(frac_part, frac_str);
-
-    if (frac_part < 100) {
-        p1strcat(int_str, ".");
-        if (frac_part < 10) {
-            p1strcat(int_str, "00");
-        } else {
-            p1strcat(int_str, "0");
-        }
-    } else {
-        p1strcat(int_str, ".");
-    }
-
-    p1strcat(int_str, frac_str);
-    p1strpack(int_str, 7, ' ', temp_buf);
-    p1strcpy(elapsed_time_str, temp_buf);
-
-    p1putstr(1, "The elapsed time to execute ");
-    p1putstr(1, process_str); 
-    p1putstr(1, " copies of \"");
-    p1putstr(1, command); 
-    p1putstr(1, "\" on ");
-    p1putstr(1, core_str); 
-    p1putstr(1, " processors is ");
-    p1putstr(1, elapsed_time_str);
-    p1putstr(1, " sec.\n");
-    
     if (command != NULL) {
-	free(command);
+        free(command);
+    }
+    for (int i = 0; i < arg_count; i++) {
+        free(args[i]);
     }
 
-    for (int i = 0; i < arg_count; i++) {
-	free(args[i]);
-    }
+    destroy_queue(process_queue);
+    destroy_queue(running_queue);
 
     return 0;
-
-}	
+}
