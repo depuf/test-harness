@@ -23,19 +23,13 @@ int running;
 queue *process_queue;
 queue *running_queue;
 
-void handle_sigcont(int signum) {
-    // this does nothing
+void handle_sigcont() {
+    // this does nothing. (intentional)
 }
 
-void scheduler(int signum) {
-    p1putstr(1, "\n--- 𓆩𓆪 ---\n");
-
-    p1putstr(1, "ready queue: ");
-    print_queue(process_queue);
-
-    p1putstr(1, "running queue: ");
-    print_queue(running_queue);
-
+/* stops processes in the running queue, appends to ready queue, 
+then dequeues *cores* processes in ready queue, appends to running queue*/ 
+void scheduler() {
     for (int i = 0; i < running; i++) {
         pid_t p = dequeue(running_queue);
         if (p != -1) {
@@ -60,15 +54,13 @@ void scheduler(int signum) {
     }
 }
 
-void handle_child(int signum) {
+// handling of finished child processes
+void handle_child() {
     int status;
     pid_t pid;
 
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
         if (WIFEXITED(status) || WIFSIGNALED(status)) {
-            p1putstr(1, "\nprocess ");
-            p1putint(1, pid);
-            p1putstr(1, " completed\n");
             remove_from_queue(process_queue, pid);
             remove_from_queue(running_queue, pid);
             running--;
@@ -178,13 +170,7 @@ int main(int argc, char *argv[]) {
 
     sleep(1);
 
-    p1putstr(1, "\n--- STARTING ROUND ---\n");
-
-    p1putstr(1, "ready queue: ");
-    print_queue(process_queue);
-
-    p1putstr(1, "running queue: ");
-    print_queue(running_queue);
+    struct timeval start,end;
 
     for (int i = 0; i < cores && !is_empty(process_queue); i++) {
         pid_t p = dequeue(process_queue);
@@ -194,6 +180,12 @@ int main(int argc, char *argv[]) {
         running++;
     }
 
+    if (gettimeofday(&start, NULL) != 0) {
+        p1perror(1, "error: gettimeofday failed\n");
+        cleanup();
+        return 1;
+    }
+
     struct itimerval timer;
     timer.it_interval.tv_sec = quantum / 1000;  
     timer.it_interval.tv_usec = (quantum % 1000) * 1000; 
@@ -201,7 +193,7 @@ int main(int argc, char *argv[]) {
     timer.it_value.tv_usec = (quantum % 1000) * 1000;
     setitimer(ITIMER_REAL, &timer, NULL);
 
-    // makes sure main doesnt exit while child processes arent finished
+    // this makes sure main doesnt exit while child processes arent finished
     int finished = 0;
     while (!finished) {
         finished = 1;
@@ -217,8 +209,53 @@ int main(int argc, char *argv[]) {
         waitpid(pid[i], NULL, 0);
     }
 
+    if (gettimeofday(&end, NULL) != 0) {
+        p1perror(1, "error: gettimeofday failed\n");
+        cleanup();
+        return 1;
+    }
 
     free(pid);
+
+    double elapsed_time = (end.tv_sec-start.tv_sec) + (end.tv_usec-start.tv_usec) / 1e6;
+    char process_str[12];
+    char core_str[12];
+    char elapsed_time_str[12];
+
+    p1itoa(processes,process_str);
+    p1itoa(cores,core_str);
+    
+    int int_part = (int)elapsed_time;
+    int frac_part = (int)((elapsed_time - int_part) * 1000);
+    char int_str[12], frac_str[4], temp_buf[50];
+
+    p1itoa(int_part, int_str);
+    p1itoa(frac_part, frac_str);
+
+    if (frac_part < 100) {
+        p1strcat(int_str, ".");
+        if (frac_part < 10) {
+            p1strcat(int_str, "00");
+        } else {
+            p1strcat(int_str, "0");
+        }
+    } else {
+        p1strcat(int_str, ".");
+    }
+
+    p1strcat(int_str, frac_str);
+    p1strpack(int_str, 7, ' ', temp_buf);
+    p1strcpy(elapsed_time_str, temp_buf);
+
+    p1putstr(1, "The elapsed time to execute ");
+    p1putstr(1, process_str); 
+    p1putstr(1, " copies of \"");
+    p1putstr(1, command); 
+    p1putstr(1, "\" on ");
+    p1putstr(1, core_str); 
+    p1putstr(1, " processors is ");
+    p1putstr(1, elapsed_time_str);
+    p1putstr(1, " sec.\n");
     
     cleanup();
 
