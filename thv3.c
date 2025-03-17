@@ -137,12 +137,16 @@ int main(int argc, char *argv[]) {
     if (!found_l) {
         p1perror(1, "error: -l flag not provided\n");
         p1putstr(1, "usage: ./thv? [–q <msec>] [-p <nprocesses>] [-c <ncores>] –l 'command line'\n");
+        destroy_queue(process_queue);
+        destroy_queue(running_queue);
         return 1;
     }
 
     if (processes <= 0 || cores <= 0 || quantum <= 0) {
         p1perror(1, "error: invalid input values\n");
         p1putstr(1, "usage: ./thv? [–q <msec>] [-p <nprocesses>] [-c <ncores>] –l 'command line'\n");
+        destroy_queue(process_queue);
+        destroy_queue(running_queue);
         return 1;
     }
 
