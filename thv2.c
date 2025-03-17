@@ -46,8 +46,11 @@ int main(int argc, char *argv[]) {
         quantum = p1atoi(q);
     } 
 
+    int found_l = 0;
+
     for (int i = 1; i < argc; i++) {
         if (p1strneq(argv[i],"-l",2)) {
+            found_l = 1;
             if (i + 1 >= argc || p1strlen(argv[i + 1]) == 0) { 
                 p1putstr(STDERR_FILENO, "error: no command provided\n");
                 return 1; 
@@ -79,8 +82,15 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    if (!found_l) {
+        p1perror(1, "error: -l flag not provided\n");
+        p1putstr(1, "usage: ./thv? [–q <msec>] [-p <nprocesses>] [-c <ncores>] –l 'command line'\n");
+        return 1;
+    }
+
     if (processes <= 0 || cores <= 0 || quantum <= 0) {
         p1perror(1, "error: invalid input values\n");
+        p1putstr(1, "usage: ./thv? [–q <msec>] [-p <nprocesses>] [-c <ncores>] –l 'command line'\n");
         return 1;
     }
 
